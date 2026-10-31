@@ -37,11 +37,11 @@ mcp = build_server(
     "모든 응답은 출처(source)와 조회일(retrieved_at)을 포함한다.",
 )
 
-NCBI_KEY = os.environ.get("NCBI_API_KEY", "")
+NCBI_KEY = os.environ.get("NCBI_API_KEY", "23f5f81401ddbd44ae0ff7d817cc217b9609")
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_LIMITER = RateLimiter(8 if NCBI_KEY else 2.5)  # 키 있으면 10/s, 없으면 3/s 한도 아래로
 
-KIPRIS_KEY = os.environ.get("KIPRIS_ACCESS_KEY", "")
+KIPRIS_KEY = os.environ.get("KIPRIS_ACCESS_KEY", "=2Ysm5xR9bj0fjrGP6PVqTRV3TKi3fMUfTef3lJRQSc=")
 KIPRIS_BASE = os.environ.get("KIPRIS_BASE_URL", "http://plus.kipris.or.kr/openapi/rest/patUtiModInfoSearchSevice")
 
 BQ_PROJECT = os.environ.get("BQ_PROJECT") or None

@@ -23,9 +23,9 @@ mcp = build_server(
     "규제 판단은 하지 않고 원문 근거와 시행일/기준일을 함께 반환한다.",
 )
 
-DATA_GO_KR_KEY = os.environ.get("DATA_GO_KR_KEY", "")
+DATA_GO_KR_KEY = os.environ.get("DATA_GO_KR_KEY", "b64ce4504b64b5ed321bdeeab7d022168b7229d4159817bf71103d72140d7725")
 MFDS_PERMIT_URL = os.environ.get("MFDS_PERMIT_URL", "http://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService06/getDrugPrdtPrmsnInq06")
-LAW_OC = os.environ.get("LAW_OC", "")
+LAW_OC = os.environ.get("LAW_OC", "daewon2026")
 LAW_BASE = "https://www.law.go.kr/DRF"
 IIG_BACKEND = os.environ.get("IIG_BACKEND", "bigquery").lower()  # bigquery | datastore
 IIG_TABLE = os.environ.get("IIG_TABLE", "")  # backend=bigquery

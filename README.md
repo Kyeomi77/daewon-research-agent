@@ -9,15 +9,15 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
               └ 약물·물성·규제 에이전트 ─ MCP#2 (daewon-mcp-chem) + MCP#3 (daewon-mcp-reg) + Google Search(도메인 한정)
 ```
 
-| 구성요소 | 위치 | 제공 도구 |
-|---|---|---|
-| MCP#1 논문·특허 | `src/papers_patents_server.py` | `search_pubmed` `get_pmc_fulltext` `search_kipris` `search_patents_bq` `get_patent_claims` `estimate_patent_expiry` |
-| MCP#2 물성·활성·라벨 | `src/chem_server.py` | `pubchem_properties` `chembl_search_target` `chembl_activity` `dailymed_label` |
-| MCP#3 허가·법령·IIG | `src/regulatory_server.py` | `mfds_product_search` `law_search` `law_get_text` `iig_lookup` |
-| 공통(가드·감사로그·재시도) | `src/common.py` | 사내 코드 차단, 감사 로그, 레이트리밋 |
-| 에이전트 지침 | `prompts/*.md` | Agent Designer 에 붙여넣을 Instructions |
-| 배포/적재/점검 | `scripts/` | `deploy.sh` `load_csv_to_bq.py` `prepare_iig_for_datastore.py` `smoke_test.py` |
-| 평가 | `tests/golden_set.csv`, `tests/test_parsers.py` | 골든셋 15문항, 단위 테스트 11개 |
+| 구성요소                   | 위치                                            | 제공 도구                                                                                                           |
+| -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| MCP#1 논문·특허            | `src/papers_patents_server.py`                  | `search_pubmed` `get_pmc_fulltext` `search_kipris` `search_patents_bq` `get_patent_claims` `estimate_patent_expiry` |
+| MCP#2 물성·활성·라벨       | `src/chem_server.py`                            | `pubchem_properties` `chembl_search_target` `chembl_activity` `dailymed_label`                                      |
+| MCP#3 허가·법령·IIG        | `src/regulatory_server.py`                      | `mfds_product_search` `law_search` `law_get_text` `iig_lookup`                                                      |
+| 공통(가드·감사로그·재시도) | `src/common.py`                                 | 사내 코드 차단, 감사 로그, 레이트리밋                                                                               |
+| 에이전트 지침              | `prompts/*.md`                                  | Agent Designer 에 붙여넣을 Instructions                                                                             |
+| 배포/적재/점검             | `scripts/`                                      | `deploy.sh` `load_csv_to_bq.py` `prepare_iig_for_datastore.py` `smoke_test.py`                                      |
+| 평가                       | `tests/golden_set.csv`, `tests/test_parsers.py` | 골든셋 15문항, 단위 테스트 11개                                                                                     |
 
 > **검증 상태**: 파서·가드·계산기 단위 테스트(11개) 통과, 3개 서버가 기동되어 MCP(Streamable HTTP)로 도구 호출되는 것까지 확인했습니다. **실제 외부 API(NCBI, KIPRIS, 공공데이터포털, 법령정보 등) 호출은 작성 환경에서 외부 접속이 막혀 테스트하지 못했습니다.** 아래 8장의 "확인 필요 항목"을 키 발급 후 `smoke_test.py`로 반드시 검증하세요.
 
@@ -25,31 +25,33 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
 
 ## 1. 개발 절차 한눈에 보기
 
-| 단계 | 내용 | 산출물/완료 기준 |
-|---|---|---|
-| 0 | 사전 준비: GCP 프로젝트, Gemini Enterprise 앱, 권한, API 키 | 키 4종, 앱 생성 |
-| 1 | 로컬 개발·테스트: 서버 실행 → `smoke_test.py` | 도구 호출 성공 |
-| 2 | IIG 등 정기 데이터 BigQuery 적재 | `iig_lookup` 성공 |
-| 3 | Cloud Run 배포 (`deploy.sh`) | `/mcp` URL 3개 |
-| 4 | Gemini Enterprise 에 Custom MCP Server 데이터 스토어 등록 | 데이터 스토어 3개, 도구 활성화 |
-| 5 | Agent Designer 로 에이전트 3개 구성 | 에이전트 공유 |
-| 6 | 골든셋 평가 → 프롬프트·도구 개선 | 정확도·출처 누락률 기준 충족 |
-| 7 | 운영: 로그 점검, 키 로테이션, 데이터 갱신 | 월간 점검 |
+| 단계 | 내용                                                        | 산출물/완료 기준               |
+| ---- | ----------------------------------------------------------- | ------------------------------ |
+| 0    | 사전 준비: GCP 프로젝트, Gemini Enterprise 앱, 권한, API 키 | 키 4종, 앱 생성                |
+| 1    | 로컬 개발·테스트: 서버 실행 → `smoke_test.py`               | 도구 호출 성공                 |
+| 2    | IIG 등 정기 데이터 BigQuery 적재                            | `iig_lookup` 성공              |
+| 3    | Cloud Run 배포 (`deploy.sh`)                                | `/mcp` URL 3개                 |
+| 4    | Gemini Enterprise 에 Custom MCP Server 데이터 스토어 등록   | 데이터 스토어 3개, 도구 활성화 |
+| 5    | Agent Designer 로 에이전트 3개 구성                         | 에이전트 공유                  |
+| 6    | 골든셋 평가 → 프롬프트·도구 개선                            | 정확도·출처 누락률 기준 충족   |
+| 7    | 운영: 로그 점검, 키 로테이션, 데이터 갱신                   | 월간 점검                      |
 
 ## 2. 사전 준비 (0단계)
 
 **계정/권한**
+
 - GCP 프로젝트(결제 연결), Gemini Enterprise 앱(이미 있으면 재사용)
 - 본인에게: Cloud Run Admin, Cloud Build Editor, Service Account Admin, Secret Manager Admin, BigQuery Admin(또는 데이터셋 생성 권한), Discovery Engine Editor(데이터 스토어 등록용)
 - 조직 정책 **"Disable custom mcp server connector for gemini enterprise"** 가 *Not enforced* 인지 확인(막혀 있으면 데이터 스토어 생성이 거부됨)
 
 **API 키 발급 (모두 무료)**
-| 키 | 발급처 | 환경변수 |
-|---|---|---|
-| NCBI API Key (선택, 속도 3→10 req/s) | NCBI 계정 설정 | `NCBI_API_KEY` |
-| KIPRIS Plus accessKey | plus.kipris.or.kr 회원가입 → 특허·실용신안 검색 서비스 신청 | `KIPRIS_ACCESS_KEY` |
-| 공공데이터포털 인증키 | data.go.kr → "식품의약품안전처_의약품 제품 허가정보" 활용신청 (**Decoding 키** 사용) | `DATA_GO_KR_KEY` |
-| 국가법령정보 OC | open.law.go.kr Open API 신청(**호출 서버 IP 등록 필요**, 7장) | `LAW_OC` |
+
+| 키                                   | 발급처                                                                               | 환경변수                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| NCBI API Key (선택, 속도 3→10 req/s) | NCBI 계정 설정                                                                       | `NCBI_API_KEY`23f5f81401ddbd44ae0ff7d817cc217b9609                                |
+| KIPRIS Plus accessKey                | plus.kipris.or.kr 회원가입 → 특허·실용신안 검색 서비스 신청                          | `KIPRIS_ACCESS_KEY` =2Ysm5xR9bj0fjrGP6PVqTRV3TKi3fMUfTef3lJRQSc=                  |
+| 공공데이터포털 인증키                | data.go.kr → "식품의약품안전처_의약품 제품 허가정보" 활용신청 (**Decoding 키** 사용) | `DATA_GO_KR_KEY` b64ce4504b64b5ed321bdeeab7d022168b7229d4159817bf71103d72140d7725 |
+| 국가법령정보 OC                      | open.law.go.kr Open API 신청(**호출 서버 IP 등록 필요**, 7장)                        | `LAW_OC` daewon2026                                                               |
 
 **사내 코드 차단 규칙(중요)**: `.env`/`deploy.sh` 의 `BLOCK_PATTERNS` 에 대원제약 개발코드·후보물질 코드의 정규식을 반드시 넣으세요. 이 규칙에 걸린 질의는 외부 API로 나가지 않습니다(특허 신규성·정보 유출 방지).
 
@@ -78,18 +80,19 @@ BigQuery 도구(`search_patents_bq`, `iig_lookup`)는 로컬에서 `gcloud auth 
 
 FDA IIG 는 **BigQuery** 또는 **Gemini Enterprise 데이터 스토어** 중 하나에 적재할 수 있고, `IIG_BACKEND` 환경변수로 선택합니다. 두 경우 모두 FDA 사이트에서 데이터 파일을 내려받아(xlsx면 CSV로 저장) 시작하며, 컬럼명은 자동 정규화(`Ingredient Name` → `ingredient_name`)됩니다. `iig_lookup` 은 기본적으로 `ingredient_name`, `route`, `dosage_form` 컬럼이 있다고 가정하므로 **적재 후 실제 컬럼명을 확인**하고 다르면 `IIG_FIELD_*` 환경변수로 맞추세요.
 
-| 비교 | A. BigQuery (`IIG_BACKEND=bigquery`) | B. 데이터 스토어 (`IIG_BACKEND=datastore`) |
-|---|---|---|
-| 조회 방식 | SQL 조건 검색 → 조건에 맞는 행을 **전수** 조회 | 검색(Search API) 결과 상위 N건을 훑은 뒤 코드에서 재필터 → 행이 많으면 **일부 누락 가능**(응답에 `possibly_incomplete` 표시) |
-| 수치 신뢰도 | 높음(결정적) | 중간(검색 랭킹 의존, 투여경로·제형으로 좁히면 개선) |
-| 사용 편의 | 테이블 적재 + SQL 권한 | 콘솔에서 가져오기만 하면 됨, BigQuery 불필요 |
-| 에이전트 직접 연결 | 불가(MCP 도구 경유) | **가능**(MCP 없이 Agent Designer 에서 데이터 스토어를 바로 연결 — 4-B 참고) |
-| 기준일 표기 | 테이블 description | 각 행의 `data_date` 컬럼 |
-| 권한 | `bigquery.dataViewer` | `discoveryengine.viewer` |
+| 비교               | A. BigQuery (`IIG_BACKEND=bigquery`)           | B. 데이터 스토어 (`IIG_BACKEND=datastore`)                                                                                   |
+| ------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 조회 방식          | SQL 조건 검색 → 조건에 맞는 행을 **전수** 조회 | 검색(Search API) 결과 상위 N건을 훑은 뒤 코드에서 재필터 → 행이 많으면 **일부 누락 가능**(응답에 `possibly_incomplete` 표시) |
+| 수치 신뢰도        | 높음(결정적)                                   | 중간(검색 랭킹 의존, 투여경로·제형으로 좁히면 개선)                                                                          |
+| 사용 편의          | 테이블 적재 + SQL 권한                         | 콘솔에서 가져오기만 하면 됨, BigQuery 불필요                                                                                 |
+| 에이전트 직접 연결 | 불가(MCP 도구 경유)                            | **가능**(MCP 없이 Agent Designer 에서 데이터 스토어를 바로 연결 — 4-B 참고)                                                  |
+| 기준일 표기        | 테이블 description                             | 각 행의 `data_date` 컬럼                                                                                                     |
+| 권한               | `bigquery.dataViewer`                          | `discoveryengine.viewer`                                                                                                     |
 
 > **권장**: 최대 사용량처럼 *정확한 값이 중요한 조회*는 A(BigQuery). BigQuery를 쓰지 않거나 설정을 단순하게 하고 싶다면 B로 시작하고, 정확도는 골든셋 9번 문항(포비돈 등)으로 검증하세요.
 
 ### 4-A. BigQuery 적재
+
 ```bash
 python scripts/load_csv_to_bq.py --csv data/iig.csv \
   --table <PROJECT>.research_ref.fda_iig --data-date 2026-10 \
@@ -98,9 +101,11 @@ bq show --schema --format=prettyjson <PROJECT>:research_ref.fda_iig | head -50
 ```
 
 ### 4-B. Gemini Enterprise 데이터 스토어 적재
+
 공식 문서 기준, Cloud Storage 의 **구조화 데이터는 JSON Lines/NDJSON(파일당 2GB·행당 1MB 미만, 요청당 최대 1,000파일) 또는 헤더가 있는 CSV** 로 가져올 수 있고, 스키마는 자동 감지됩니다.
 
 1. 파일 준비(정규화 + 모든 행에 `data_date`/`source_url` 추가, JSONL·CSV 동시 생성)
+
    ```bash
    python scripts/prepare_iig_for_datastore.py --csv data/iig.csv --data-date 2026-10 \
      --out-dir data/iig_out --gcs-uri gs://<BUCKET>/iig/iig_2026-10.jsonl
@@ -135,6 +140,7 @@ echo -n '<LAW_OC>'        | gcloud secrets versions add law-oc --data-file=-
 - 서비스는 `--no-allow-unauthenticated`(비공개)이며, Gemini Enterprise 의 Discovery Engine 서비스 에이전트에만 `roles/run.invoker` 를 부여합니다.
 - IIG 읽기 권한: BigQuery 방식이면 `mcp-reg` 서비스 계정에 해당 **데이터셋** `roles/bigquery.dataViewer`, 데이터 스토어 방식이면 `roles/discoveryengine.viewer`(`deploy.sh` 가 자동 부여). 데이터 스토어 방식 배포: `IIG_BACKEND=datastore IIG_DATASTORE_ID=<DS_ID> ./scripts/deploy.sh reg`
 - 배포 후 IAM 토큰으로 점검:
+
   ```bash
   python scripts/smoke_test.py --url https://<서비스URL>/mcp --token "$(gcloud auth print-identity-token)" --suite chem
   ```
@@ -146,6 +152,7 @@ echo -n '<LAW_OC>'        | gcloud secrets versions add law-oc --data-file=-
 **A. Agent Designer 활성화** — Gemini Enterprise 앱 → Configurations → Feature Management → *Enable agent designer* → Save
 
 **B. Custom MCP Server 데이터 스토어 3개 등록** (Gemini Enterprise → Data stores → 데이터 소스 선택에서 *Custom MCP Server (Preview)*)
+
 1. MCP Server URL: `https://<서비스>/mcp` (HTTPS, **StreamableHTTP 만 지원**)
 2. 설명: `prompts/mcp_server_descriptions.md` 의 문구 사용
 3. 인증 정보 입력(Cloud Run IAM 방식이면 5장의 invoker 권한이 필요. 화면에 Authorization/Token URL 을 요구하면 7장의 "인증" 항목 참고)
@@ -154,11 +161,11 @@ echo -n '<LAW_OC>'        | gcloud secrets versions add law-oc --data-file=-
 
 **C. 에이전트 구성(Agent Designer)** — 웹앱에서 에이전트 만들기
 
-| 에이전트 | Instructions | 연결할 도구 | 비고 |
-|---|---|---|---|
-| 논문·특허 | `prompts/papers_patents_agent.md` | daewon-mcp-papers, Google Search | |
-| 약물·물성·규제 | `prompts/drug_reg_agent.md` | daewon-mcp-chem, daewon-mcp-reg, Google Search | Search 는 허용 도메인을 지침으로 제한 |
-| 라우터 | `prompts/router_agent.md` | 위 두 에이전트(지원 시) | 하위 에이전트 호출이 안 되면 라우터 생략하고 2개를 각각 공유 + 사용 가이드 배포 |
+| 에이전트       | Instructions                      | 연결할 도구                                    | 비고                                                                            |
+| -------------- | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| 논문·특허      | `prompts/papers_patents_agent.md` | daewon-mcp-papers, Google Search               |                                                                                 |
+| 약물·물성·규제 | `prompts/drug_reg_agent.md`       | daewon-mcp-chem, daewon-mcp-reg, Google Search | Search 는 허용 도메인을 지침으로 제한                                           |
+| 라우터         | `prompts/router_agent.md`         | 위 두 에이전트(지원 시)                        | 하위 에이전트 호출이 안 되면 라우터 생략하고 2개를 각각 공유 + 사용 가이드 배포 |
 
 각 에이전트마다 *Preview/테스트 → 공유 범위를 연구소 그룹으로 제한 → 게시* 순서로 진행합니다.
 
@@ -175,17 +182,17 @@ echo -n '<LAW_OC>'        | gcloud secrets versions add law-oc --data-file=-
 
 ## 8. 작성 환경에서 검증하지 못한 항목 (키 발급 후 확인)
 
-| 항목 | 확인 방법 | 수정 위치 |
-|---|---|---|
-| KIPRIS Plus 오퍼레이션명·파라미터(`freeSearchInfo`, `applicantNameSearchInfo`, `docsStart`=페이지번호 여부, 응답 필드명) | KIPRIS Plus 서비스 명세 대조, `smoke_test.py --suite papers` | `KIPRIS_BASE_URL`, `search_kipris`, `parse_kipris_xml` |
-| 식약처 허가정보 API 버전(`...Service06/getDrugPrdtPrmsnInq06`)과 응답 필드 | 공공데이터포털 활용신청 페이지의 End Point/명세 | `MFDS_PERMIT_URL`, `mfds_product_search` |
-| 국가법령정보 JSON 응답 구조(`law`/`admrul` 검색·본문) | `law_search` → `law_get_text` 실호출 | `law_search`, `collect_law_text` |
-| BigQuery 공개 특허 스키마(`claims_localized`, `assignee_harmonized`, `cpc` 등) | `bq show --schema patents-public-data:patents.publications` | `search_patents_bq`, `get_patent_claims` |
-| FDA IIG 컬럼명 | 4-A 의 `bq show --schema` 또는 데이터 스토어 스키마 화면 | `IIG_FIELD_*` 환경변수 |
-| 데이터 스토어 Search API 응답에서 `struct_data` 로 행이 나오는지, `custom` 스키마 JSONL 가져오기 형식, `serving_config` 경로(`default_config`) | `iig_lookup` 실호출, 가져오기 오퍼레이션 결과 | `_query_iig_ds`, `prepare_iig_for_datastore.py` |
-| PubChem 속성명(`SMILES`/`ConnectivitySMILES`) 및 PUG-View heading | `pubchem_properties` 실호출 | `PROPS`, `EXPERIMENTAL_HEADINGS` |
-| PMC ID 변환 API 주소 | `get_pmc_fulltext(pmid=…)` 실호출 | `get_pmc_fulltext` |
-| Gemini Enterprise 의 Custom MCP 인증 방식, 에이전트 간 호출 지원 | 콘솔·공식 문서 | 6장 B·C |
+| 항목                                                                                                                                           | 확인 방법                                                    | 수정 위치                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
+| KIPRIS Plus 오퍼레이션명·파라미터(`freeSearchInfo`, `applicantNameSearchInfo`, `docsStart`=페이지번호 여부, 응답 필드명)                       | KIPRIS Plus 서비스 명세 대조, `smoke_test.py --suite papers` | `KIPRIS_BASE_URL`, `search_kipris`, `parse_kipris_xml` |
+| 식약처 허가정보 API 버전(`...Service06/getDrugPrdtPrmsnInq06`)과 응답 필드                                                                     | 공공데이터포털 활용신청 페이지의 End Point/명세              | `MFDS_PERMIT_URL`, `mfds_product_search`               |
+| 국가법령정보 JSON 응답 구조(`law`/`admrul` 검색·본문)                                                                                          | `law_search` → `law_get_text` 실호출                         | `law_search`, `collect_law_text`                       |
+| BigQuery 공개 특허 스키마(`claims_localized`, `assignee_harmonized`, `cpc` 등)                                                                 | `bq show --schema patents-public-data:patents.publications`  | `search_patents_bq`, `get_patent_claims`               |
+| FDA IIG 컬럼명                                                                                                                                 | 4-A 의 `bq show --schema` 또는 데이터 스토어 스키마 화면     | `IIG_FIELD_*` 환경변수                                 |
+| 데이터 스토어 Search API 응답에서 `struct_data` 로 행이 나오는지, `custom` 스키마 JSONL 가져오기 형식, `serving_config` 경로(`default_config`) | `iig_lookup` 실호출, 가져오기 오퍼레이션 결과                | `_query_iig_ds`, `prepare_iig_for_datastore.py`        |
+| PubChem 속성명(`SMILES`/`ConnectivitySMILES`) 및 PUG-View heading                                                                              | `pubchem_properties` 실호출                                  | `PROPS`, `EXPERIMENTAL_HEADINGS`                       |
+| PMC ID 변환 API 주소                                                                                                                           | `get_pmc_fulltext(pmid=…)` 실호출                            | `get_pmc_fulltext`                                     |
+| Gemini Enterprise 의 Custom MCP 인증 방식, 에이전트 간 호출 지원                                                                               | 콘솔·공식 문서                                               | 6장 B·C                                                |
 
 ## 9. 평가 방법 (6단계)
 
