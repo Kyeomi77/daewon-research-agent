@@ -4,7 +4,8 @@
   mfds_product_search   식약처 의약품 제품 허가정보(공공데이터포털 API)
   law_search            국가법령정보센터 Open API: 법령/행정규칙(고시) 검색
   law_get_text          법령/행정규칙 본문(조문) 조회, 키워드 주변만 발췌 가능
-  iig_lookup            FDA IIG(비활성 성분 DB) — BigQuery 테이블 또는 Gemini Enterprise 데이터 스토어에서 최대 사용량 조회
+  iig_lookup            FDA IIG(비활성 성분 DB) — Gemini Enterprise 데이터 스토어에서 최대 사용량 조회
+  
 """
 import asyncio
 import json
@@ -27,16 +28,13 @@ DATA_GO_KR_KEY = os.environ.get("DATA_GO_KR_KEY", "b64ce4504b64b5ed321bdeeab7d02
 MFDS_PERMIT_URL = os.environ.get("MFDS_PERMIT_URL", "http://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService06/getDrugPrdtPrmsnInq06")
 LAW_OC = os.environ.get("LAW_OC", "daewon2026")
 LAW_BASE = "https://www.law.go.kr/DRF"
-IIG_BACKEND = os.environ.get("IIG_BACKEND", "bigquery").lower()  # bigquery | datastore
-IIG_TABLE = os.environ.get("IIG_TABLE", "")  # backend=bigquery
-IIG_DS_PROJECT = os.environ.get("IIG_DS_PROJECT", "")  # backend=datastore
+IIG_DS_PROJECT = os.environ.get("IIG_DS_PROJECT", "")
 IIG_DS_LOCATION = os.environ.get("IIG_DS_LOCATION", "global")  # global | us | eu (데이터 스토어 위치)
 IIG_DATASTORE_ID = os.environ.get("IIG_DATASTORE_ID", "")
 # IIG 데이터의 컬럼명(적재 후 실제 컬럼명에 맞게 환경변수로 조정)
 IIG_FIELD_INGREDIENT = os.environ.get("IIG_FIELD_INGREDIENT", "ingredient_name")
 IIG_FIELD_ROUTE = os.environ.get("IIG_FIELD_ROUTE", "route")
 IIG_FIELD_FORM = os.environ.get("IIG_FIELD_FORM", "dosage_form")
-BQ_PROJECT = os.environ.get("BQ_PROJECT") or None
 
 
 # =========================================================================== 식약처 허가정보
@@ -211,9 +209,7 @@ async def law_get_text(
     return envelope("국가법령정보센터 Open API", {"doc_id": doc_id, "excerpts": full[:max_chars], "truncated": len(full) > max_chars}, source_url="https://www.law.go.kr")
 
 
-# =========================================================================== FDA IIG (BigQuery 또는 Gemini Enterprise 데이터 스토어)
-# IIG_BACKEND=bigquery   : BigQuery 테이블을 SQL 로 조회(완전 일치/전수 조회, 권장)
-# IIG_BACKEND=datastore  : Gemini Enterprise(Discovery Engine) 구조화 데이터 스토어를 Search API 로 조회
+# =========================================================================== FDA IIG (Gemini Enterprise 데이터 스토어)
 def _pick(row: dict[str, Any], key: str) -> str:
     return str(row.get(key) or "")
 
@@ -233,43 +229,6 @@ def filter_iig_rows(rows: list[dict[str, Any]], ingredient: str, route: str | No
     return out
 
 
-# ---- BigQuery 백엔드
-_bq_client = None
-
-
-def _bq():
-    global _bq_client
-    if _bq_client is None:
-        from google.cloud import bigquery
-
-        _bq_client = bigquery.Client(project=BQ_PROJECT)
-    return _bq_client
-
-
-def _query_iig_bq(ingredient: str, route: str | None, dosage_form: str | None, limit: int) -> tuple[list[dict[str, Any]], str | None, bool]:
-    from google.cloud import bigquery
-
-    if not re.fullmatch(r"[\w.\-]+", IIG_TABLE):
-        raise ToolError("IIG_TABLE 환경변수가 올바르지 않습니다(project.dataset.table).")
-    for f in (IIG_FIELD_INGREDIENT, IIG_FIELD_ROUTE, IIG_FIELD_FORM):
-        if not re.fullmatch(r"\w+", f):
-            raise ToolError("IIG_FIELD_* 환경변수가 올바르지 않습니다.")
-    where = [f"UPPER(CAST({IIG_FIELD_INGREDIENT} AS STRING)) LIKE @ing"]
-    params = [bigquery.ScalarQueryParameter("ing", "STRING", f"%{ingredient.upper()}%"), bigquery.ScalarQueryParameter("lim", "INT64", limit + 1)]
-    if route:
-        where.append(f"UPPER(CAST({IIG_FIELD_ROUTE} AS STRING)) LIKE @route")
-        params.append(bigquery.ScalarQueryParameter("route", "STRING", f"%{route.upper()}%"))
-    if dosage_form:
-        where.append(f"UPPER(CAST({IIG_FIELD_FORM} AS STRING)) LIKE @form")
-        params.append(bigquery.ScalarQueryParameter("form", "STRING", f"%{dosage_form.upper()}%"))
-    sql = f"SELECT * FROM `{IIG_TABLE}` WHERE {' AND '.join(where)} LIMIT @lim"
-    client = _bq()
-    rows = [dict(r) for r in client.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params, maximum_bytes_billed=10**9)).result(timeout=60)]
-    desc = client.get_table(IIG_TABLE).description or None
-    return rows[:limit], desc, len(rows) > limit
-
-
-# ---- Gemini Enterprise 데이터 스토어 백엔드
 _de_client = None
 IIG_DS_MAX_SCAN = int(os.environ.get("IIG_DS_MAX_SCAN", "500"))  # 검색 결과를 최대 몇 건까지 훑을지
 
@@ -285,7 +244,7 @@ def _de():
     return _de_client
 
 
-def _query_iig_ds(ingredient: str, route: str | None, dosage_form: str | None, limit: int) -> tuple[list[dict[str, Any]], str | None, bool]:
+def _query_iig(ingredient: str, route: str | None, dosage_form: str | None, limit: int) -> tuple[list[dict[str, Any]], str | None, bool]:
     from google.cloud import discoveryengine_v1 as de
 
     if not (IIG_DS_PROJECT and IIG_DATASTORE_ID):
@@ -318,14 +277,6 @@ def _query_iig_ds(ingredient: str, route: str | None, dosage_form: str | None, l
     return matched[:limit], desc, incomplete
 
 
-def _query_iig(ingredient: str, route: str | None, dosage_form: str | None, limit: int) -> tuple[list[dict[str, Any]], str | None, bool]:
-    if IIG_BACKEND == "datastore":
-        return _query_iig_ds(ingredient, route, dosage_form, limit)
-    if IIG_BACKEND == "bigquery":
-        return _query_iig_bq(ingredient, route, dosage_form, limit)
-    raise ToolError("IIG_BACKEND 는 'bigquery' 또는 'datastore' 여야 합니다.")
-
-
 @mcp.tool()
 @safe_tool
 async def iig_lookup(
@@ -334,17 +285,16 @@ async def iig_lookup(
     dosage_form: Annotated[str | None, Field(description="제형. 예: 'TABLET', 'CAPSULE'")] = None,
     max_results: Annotated[int, Field(ge=1, le=50)] = 20,
 ) -> dict[str, Any]:
-    """FDA IIG(Inactive Ingredient Database) 적재본에서 부형제의 투여경로·제형별 최대 사용량(potency/maximum daily exposure)을 조회한다."""
-    if IIG_BACKEND == "bigquery" and not IIG_TABLE:
-        raise ToolError("IIG_TABLE 이 설정되지 않았습니다. scripts/load_csv_to_bq.py 로 먼저 적재하세요.")
+    """FDA IIG(Inactive Ingredient Database) 데이터 스토어 적재본에서 부형제의 투여경로·제형별 최대 사용량(potency/maximum daily exposure)을 조회한다."""
     guard_query(ingredient, route, dosage_form)
     rows, desc, incomplete = await asyncio.to_thread(_query_iig, ingredient, route, dosage_form, max_results)
-    label = "Gemini Enterprise 데이터 스토어 적재본" if IIG_BACKEND == "datastore" else "BigQuery 적재본"
+    label = "Gemini Enterprise 데이터 스토어 적재본"
     if not rows:
-        note = "일치하는 항목이 없습니다. 영문 성분명 철자/염 형태를 바꿔 보세요."
-        if IIG_BACKEND == "datastore":
-            note += " (데이터 스토어는 검색 기반이라 후보 상위 일부만 훑습니다. 투여경로·제형 조건을 빼고 다시 시도해 보세요.)"
-        return envelope(f"FDA IIG ({label})", {"rows": []}, note=note)
+        return envelope(
+            f"FDA IIG ({label})",
+            {"rows": []},
+            note="일치하는 항목이 없습니다. 영문 성분명 철자/염 형태를 바꿔 보세요. (데이터 스토어는 검색 기반이라 후보 상위 일부만 훑습니다. 투여경로·제형 조건을 빼고 다시 시도해 보세요.)",
+        )
     note = "IIG 는 FDA 승인 의약품에 사용된 선례 수준(최대 사용량)이며, 안전성 보증 한도나 국내 허가 근거가 아닙니다. table_description 의 기준일을 함께 인용하세요."
     if incomplete:
         note += " ※ 조건에 맞는 행이 더 있을 수 있습니다(결과 일부만 표시). 투여경로·제형을 지정해 범위를 좁혀 다시 조회하세요."

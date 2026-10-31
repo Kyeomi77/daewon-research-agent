@@ -5,6 +5,7 @@
   chembl_search_target ChEMBL 타깃 이름 → ChEMBL ID
   chembl_activity      ChEMBL: IC50/Ki 등 생물활성(분자 또는 타깃 기준) + 타깃별 요약
   dailymed_label       DailyMed(FDA SPL): 활성·비활성 성분, 제형, 주요 라벨 섹션
+  
 """
 import asyncio
 import statistics

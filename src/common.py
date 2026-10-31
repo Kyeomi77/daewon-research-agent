@@ -4,6 +4,7 @@
 - 외부 질의 가드(사내 코드·기밀 표시 차단)  ← 연구소 IP 보호의 핵심
 - 감사 로그(Cloud Logging 으로 stdout JSON 출력)
 - FastMCP 서버 부트스트랩(Streamable HTTP, /healthz)
+
 """
 import asyncio
 import functools

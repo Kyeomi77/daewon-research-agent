@@ -13,10 +13,10 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
 | -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | MCP#1 논문·특허            | `src/papers_patents_server.py`                  | `search_pubmed` `get_pmc_fulltext` `search_kipris` `search_patents_bq` `get_patent_claims` `estimate_patent_expiry` |
 | MCP#2 물성·활성·라벨       | `src/chem_server.py`                            | `pubchem_properties` `chembl_search_target` `chembl_activity` `dailymed_label`                                      |
-| MCP#3 허가·법령·IIG        | `src/regulatory_server.py`                      | `mfds_product_search` `law_search` `law_get_text` `iig_lookup`                                                      |
+| MCP#3 허가·법령·IIG        | `src/regulatory_server.py`                      | `mfds_product_search` `law_search` `law_get_text` `iig_lookup` (Data Store)                                         |
 | 공통(가드·감사로그·재시도) | `src/common.py`                                 | 사내 코드 차단, 감사 로그, 레이트리밋                                                                               |
 | 에이전트 지침              | `prompts/*.md`                                  | Agent Designer 에 붙여넣을 Instructions                                                                             |
-| 배포/적재/점검             | `scripts/`                                      | `deploy.sh` `load_csv_to_bq.py` `prepare_iig_for_datastore.py` `smoke_test.py`                                      |
+| 배포/적재/점검             | `scripts/`                                      | `deploy.sh` `prepare_iig_for_datastore.py` `smoke_test.py`                                                           |
 | 평가                       | `tests/golden_set.csv`, `tests/test_parsers.py` | 골든셋 15문항, 단위 테스트 11개                                                                                     |
 
 > **검증 상태**: 파서·가드·계산기 단위 테스트(11개) 통과, 3개 서버가 기동되어 MCP(Streamable HTTP)로 도구 호출되는 것까지 확인했습니다. **실제 외부 API(NCBI, KIPRIS, 공공데이터포털, 법령정보 등) 호출은 작성 환경에서 외부 접속이 막혀 테스트하지 못했습니다.** 아래 8장의 "확인 필요 항목"을 키 발급 후 `smoke_test.py`로 반드시 검증하세요.
@@ -29,7 +29,7 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
 | ---- | ----------------------------------------------------------- | ------------------------------ |
 | 0    | 사전 준비: GCP 프로젝트, Gemini Enterprise 앱, 권한, API 키 | 키 4종, 앱 생성                |
 | 1    | 로컬 개발·테스트: 서버 실행 → `smoke_test.py`               | 도구 호출 성공                 |
-| 2    | IIG 등 정기 데이터 BigQuery 적재                            | `iig_lookup` 성공              |
+| 2    | IIG 등 정기 데이터 Gemini Enterprise 데이터 스토어 적재     | `iig_lookup` 성공              |
 | 3    | Cloud Run 배포 (`deploy.sh`)                                | `/mcp` URL 3개                 |
 | 4    | Gemini Enterprise 에 Custom MCP Server 데이터 스토어 등록   | 데이터 스토어 3개, 도구 활성화 |
 | 5    | Agent Designer 로 에이전트 3개 구성                         | 에이전트 공유                  |

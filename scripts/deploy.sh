@@ -8,11 +8,9 @@ set -euo pipefail
 REGION="${REGION:-asia-northeast3}"            # 서울
 CONTACT_EMAIL="${CONTACT_EMAIL:-research-it@example.co.kr}"
 BQ_PROJECT="${BQ_PROJECT:-$PROJECT_ID}"
-IIG_BACKEND="${IIG_BACKEND:-bigquery}"           # bigquery | datastore
-IIG_TABLE="${IIG_TABLE:-$PROJECT_ID.research_ref.fda_iig}"
 IIG_DS_PROJECT="${IIG_DS_PROJECT:-$PROJECT_ID}"
 IIG_DS_LOCATION="${IIG_DS_LOCATION:-global}"
-IIG_DATASTORE_ID="${IIG_DATASTORE_ID:-}"          # backend=datastore 일 때 필수
+IIG_DATASTORE_ID="${IIG_DATASTORE_ID:-}"          # Data Store ID (필수)
 BLOCK_PATTERNS="${BLOCK_PATTERNS:-\\bDW[-_ ]?\\d{3,}\\b}"   # 사내 코드 형식에 맞게 반드시 수정
 TARGET="${1:-all}"
 
@@ -68,17 +66,11 @@ fi
 
 if [[ "$TARGET" == all || "$TARGET" == reg ]]; then
   ensure_sa mcp-reg
-  gcloud projects add-iam-policy-binding "$BQ_PROJECT" --member "serviceAccount:mcp-reg@$PROJECT_ID.iam.gserviceaccount.com" --role roles/bigquery.jobUser >/dev/null
-  # IIG 데이터셋 읽기 권한(데이터셋 단위로 부여 권장): bq add-iam-policy-binding 또는 콘솔에서 roles/bigquery.dataViewer
+  : "${IIG_DATASTORE_ID:?IIG 데이터 조회를 위한 IIG_DATASTORE_ID 가 필요합니다}"
+  gcloud projects add-iam-policy-binding "$IIG_DS_PROJECT" --member "serviceAccount:mcp-reg@$PROJECT_ID.iam.gserviceaccount.com" --role roles/discoveryengine.viewer >/dev/null
   ensure_secret data-go-kr-key; ensure_secret law-oc
   grant_secret mcp-reg data-go-kr-key; grant_secret mcp-reg law-oc
-  if [[ "$IIG_BACKEND" == datastore ]]; then
-    : "${IIG_DATASTORE_ID:?IIG_BACKEND=datastore 이면 IIG_DATASTORE_ID 가 필요합니다}"
-    gcloud projects add-iam-policy-binding "$IIG_DS_PROJECT" --member "serviceAccount:mcp-reg@$PROJECT_ID.iam.gserviceaccount.com" --role roles/discoveryengine.viewer >/dev/null
-    IIG_ENV="@IIG_BACKEND=datastore@IIG_DS_PROJECT=$IIG_DS_PROJECT@IIG_DS_LOCATION=$IIG_DS_LOCATION@IIG_DATASTORE_ID=$IIG_DATASTORE_ID"
-  else
-    IIG_ENV="@IIG_BACKEND=bigquery@IIG_TABLE=$IIG_TABLE"
-  fi
+  IIG_ENV="@IIG_DS_PROJECT=$IIG_DS_PROJECT@IIG_DS_LOCATION=$IIG_DS_LOCATION@IIG_DATASTORE_ID=$IIG_DATASTORE_ID"
   deploy daewon-mcp-reg regulatory_server mcp-reg "DATA_GO_KR_KEY=data-go-kr-key:latest,LAW_OC=law-oc:latest" "$IIG_ENV"
   echo "!! 국가법령정보 Open API 는 호출 서버 IP 등록이 필요합니다. Cloud NAT 고정 IP 구성은 README 7장을 참고하세요."
 fi

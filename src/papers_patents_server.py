@@ -7,6 +7,7 @@
   search_patents_bq        BigQuery 공개 특허 데이터셋(글로벌) 검색
   get_patent_claims        BigQuery 에서 특정 공보의 청구항 조회(비용 큼)
   estimate_patent_expiry   출원일 기준 기본 존속기간(20년) 추정 계산기
+  
 """
 import asyncio
 import os
