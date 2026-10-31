@@ -38,6 +38,9 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
 
 ## 2. 사전 준비 (0단계)
 
+** 환경변수 선언**
+./env.sh
+
 **계정/권한**
 
 - GCP 프로젝트(결제 연결), Gemini Enterprise 앱(이미 있으면 재사용)
