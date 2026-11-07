@@ -4,9 +4,9 @@
 # 사전: gcloud auth login && gcloud config set project $PROJECT_ID
 set -euo pipefail
 
-: "${PROJECT_ID:?PROJECT_ID 를 지정하세요}"
+PROJECT_ID="uk-adc-core-geminienterprise"
 REGION="${REGION:-asia-northeast3}"            # 서울
-CONTACT_EMAIL="${CONTACT_EMAIL:-research-it@example.co.kr}"
+CONTACT_EMAIL="${CONTACT_EMAIL:dgkim.gws@uclick.co.kr}"
 BQ_PROJECT="${BQ_PROJECT:-$PROJECT_ID}"
 IIG_DS_PROJECT="${IIG_DS_PROJECT:-$PROJECT_ID}"
 IIG_DS_LOCATION="${IIG_DS_LOCATION:-global}"

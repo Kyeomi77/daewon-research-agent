@@ -38,14 +38,12 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
 
 ## 2. 사전 준비 (0단계)
 
-** 환경변수 선언**
-./env.sh
-
 **계정/권한**
 
 - GCP 프로젝트(결제 연결), Gemini Enterprise 앱(이미 있으면 재사용)
 - 본인에게: Cloud Run Admin, Cloud Build Editor, Service Account Admin, Secret Manager Admin, BigQuery Admin(또는 데이터셋 생성 권한), Discovery Engine Editor(데이터 스토어 등록용)
 - 조직 정책 **"Disable custom mcp server connector for gemini enterprise"** 가 *Not enforced* 인지 확인(막혀 있으면 데이터 스토어 생성이 거부됨)
+##  BigQuery 특허 조회를 위해 서비스 계정에 IAM 설정 : bigquery data view (dgkim@uclick.co.kr)
 
 **API 키 발급 (모두 무료)**
 
@@ -61,9 +59,11 @@ Gemini Enterprise **Agent Designer**(노코드)로 에이전트를 만들고, �
 ## 3. 로컬 개발·테스트 (1단계)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
+pip install --only-binary=:all: cryptography
 pip install -r requirements.txt pytest
-cp .env.example .env      # 값 채우기 후:  set -a; source .env; set +a
+** 환경변수 선언**
+sh env.sh
 
 pytest -q                 # 오프라인 단위 테스트
 
@@ -76,12 +76,15 @@ python scripts/smoke_test.py --url http://localhost:8081/mcp --suite papers
 python scripts/smoke_test.py --url http://localhost:8082/mcp --suite chem
 python scripts/smoke_test.py --url http://localhost:8083/mcp --suite reg
 ```
+# 실행 중인 서버를 종료합니다.
+# 8081 포트를 점유한 프로세스 확인 후 종료
+lsof -ti :8081 | xargs kill
 
-BigQuery 도구(`search_patents_bq`, `iig_lookup`)는 로컬에서 `gcloud auth application-default login` 후 동작합니다. `search_patents_bq` 는 `dry_run=true` 로 먼저 **예상 스캔량**을 보고, 한도(`BQ_MAX_BYTES_BILLED`, 기본 300GB)를 넘으면 실행을 거부합니다.
+## BigQuery 도구(`search_patents_bq`, `iig_lookup`)는 로컬에서 `gcloud auth application-default login` 후 동작합니다. `search_patents_bq` 는 `dry_run=true` 로 먼저 **예상 스캔량**을 보고, 한도(`BQ_MAX_BYTES_BILLED`, 기본 300GB)를 넘으면 실행을 거부합니다.
 
 ## 4. 정기 데이터 적재 — FDA IIG (2단계)
 
-FDA IIG 는 **BigQuery** 또는 **Gemini Enterprise 데이터 스토어** 중 하나에 적재할 수 있고, `IIG_BACKEND` 환경변수로 선택합니다. 두 경우 모두 FDA 사이트에서 데이터 파일을 내려받아(xlsx면 CSV로 저장) 시작하며, 컬럼명은 자동 정규화(`Ingredient Name` → `ingredient_name`)됩니다. `iig_lookup` 은 기본적으로 `ingredient_name`, `route`, `dosage_form` 컬럼이 있다고 가정하므로 **적재 후 실제 컬럼명을 확인**하고 다르면 `IIG_FIELD_*` 환경변수로 맞추세요.
+FDA IIG (https://www.fda.gov/drugs/drug-approvals-and-databases/inactive-ingredients-database-download) 는 **BigQuery** 또는 **Gemini Enterprise 데이터 스토어** 중 하나에 적재할 수 있고, `IIG_BACKEND` 환경변수로 선택합니다. 두 경우 모두 FDA 사이트에서 데이터 파일을 내려받아(xlsx면 CSV로 저장) 시작하며, 컬럼명은 자동 정규화(`Ingredient Name` → `ingredient_name`)됩니다. `iig_lookup` 은 기본적으로 `ingredient_name`, `route`, `dosage_form` 컬럼이 있다고 가정하므로 **적재 후 실제 컬럼명을 확인**하고 다르면 `IIG_FIELD_*` 환경변수로 맞추세요.
 
 | 비교               | A. BigQuery (`IIG_BACKEND=bigquery`)           | B. 데이터 스토어 (`IIG_BACKEND=datastore`)                                                                                   |
 | ------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -92,16 +95,6 @@ FDA IIG 는 **BigQuery** 또는 **Gemini Enterprise 데이터 스토어** 중 �
 | 기준일 표기        | 테이블 description                             | 각 행의 `data_date` 컬럼                                                                                                     |
 | 권한               | `bigquery.dataViewer`                          | `discoveryengine.viewer`                                                                                                     |
 
-> **권장**: 최대 사용량처럼 *정확한 값이 중요한 조회*는 A(BigQuery). BigQuery를 쓰지 않거나 설정을 단순하게 하고 싶다면 B로 시작하고, 정확도는 골든셋 9번 문항(포비돈 등)으로 검증하세요.
-
-### 4-A. BigQuery 적재
-
-```bash
-python scripts/load_csv_to_bq.py --csv data/iig.csv \
-  --table <PROJECT>.research_ref.fda_iig --data-date 2026-10 \
-  --source-url https://www.accessdata.fda.gov/scripts/cder/iig/index.cfm
-bq show --schema --format=prettyjson <PROJECT>:research_ref.fda_iig | head -50
-```
 
 ### 4-B. Gemini Enterprise 데이터 스토어 적재
 
@@ -110,14 +103,16 @@ bq show --schema --format=prettyjson <PROJECT>:research_ref.fda_iig | head -50
 1. 파일 준비(정규화 + 모든 행에 `data_date`/`source_url` 추가, JSONL·CSV 동시 생성)
 
    ```bash
-   python scripts/prepare_iig_for_datastore.py --csv data/iig.csv --data-date 2026-10 \
-     --out-dir data/iig_out --gcs-uri gs://<BUCKET>/iig/iig_2026-10.jsonl
+  python scripts/prepare_iig_for_datastore.py --csv data/iig.csv --data-date 2026-10 \
+      --out-dir data/iig_out \
+      --gcs-uri gs://uk-adc-core-geminienterprise-rdkit-storage/iig_2026-10.jsonl \
+      --import-to projects/uk-adc-core-geminienterprise/locations/global/collections/default_collection/dataStores/daewon-research-ds_1794032917835
    ```
 2. 콘솔: Gemini Enterprise → **Data stores → Create data store → Cloud Storage** → 데이터 유형 **구조화 데이터(JSONL)** 선택 → 위 gs:// 경로 지정 → 1회 가져오기(one-time) 선택 → 생성
-   (스크립트로 가져오려면 `--import-to projects/<P>/locations/global/collections/default_collection/dataStores/<DS_ID>` 를 추가. `reconciliationMode=FULL` 이라 갱신 시 이전 문서가 교체됩니다.)
+   (스크립트로 가져오려면 `--import-to projects/<PROJECT_ID>/locations/global/collections/default_collection/dataStores/<IIG_DATASTORE_ID>` 를 추가. `reconciliationMode=FULL` 이라 갱신 시 이전 문서가 교체됩니다.)
 3. 가져오기가 끝나면 데이터 스토어의 **문서 수 = 스크립트가 출력한 행 수** 인지 대조하고, 스키마의 필드명을 확인
 4. 사용 방법 두 가지 중 선택
-   - **(권장) MCP 도구 경유**: `IIG_BACKEND=datastore IIG_DS_PROJECT=<P> IIG_DS_LOCATION=global IIG_DATASTORE_ID=<DS_ID>` 로 배포(`deploy.sh` 가 `roles/discoveryengine.viewer` 부여). 에이전트 지침·출력 형식이 BigQuery 방식과 동일.
+   - **(권장) MCP 도구 경유**: `IIG_BACKEND=datastore IIG_DS_PROJECT=<PROJECT_ID> IIG_DS_LOCATION=global IIG_DATASTORE_ID=daewon-research-ds_1794032917835` 로 배포(`deploy.sh` 가 `roles/discoveryengine.viewer` 부여). 에이전트 지침·출력 형식이 BigQuery 방식과 동일.
    - **에이전트에 직접 연결**: 데이터 스토어를 Gemini Enterprise 앱에 연결한 뒤 Agent Designer 에서 해당 데이터 스토어를 에이전트의 도구로 지정. 코드는 필요 없지만, 자연어 검색 결과를 모델이 요약하는 방식이라 **수치·행 누락 위험이 더 큽니다** — 지침에 "IIG 값은 검색된 행의 원문 값만 표로 인용, 행이 많으면 투여경로·제형을 되묻기"를 추가하세요.
 5. 갱신(분기 1회 권장): 같은 명령을 새 `--data-date` 로 재실행(FULL 교체). 데이터 스토어의 *주기적 가져오기*(1·3·5일)는 공개 미리보기이므로 FDA 갱신 주기에는 수동 갱신으로 충분합니다.
 
@@ -125,14 +120,17 @@ bq show --schema --format=prettyjson <PROJECT>:research_ref.fda_iig | head -50
 
 ## 5. Cloud Run 배포 (3단계)
 
-```bash
-gcloud auth login && gcloud config set project <PROJECT_ID>
-export PROJECT_ID=<PROJECT_ID> CONTACT_EMAIL=<연구소IT메일> \
-       BLOCK_PATTERNS='\bDW[-_ ]?\d{3,}\b'      # ← 사내 코드 정규식으로 교체
-
-./scripts/deploy.sh all         # 또는 papers | chem | reg
+# gcloud auth login && gcloud config set project <PROJECT_ID>
+# export PROJECT_ID=<PROJECT_ID> CONTACT_EMAIL=<연구소IT메일> \
+#       BLOCK_PATTERNS='\bDW[-_ ]?\d{3,}\b'      # ← 사내 코드 정규식으로 교체
+# ./scripts/deploy.sh all         # 또는 papers | chem | reg
 
 # 최초 1회: 시크릿 값 등록(스크립트가 빈 시크릿을 만들어 줍니다)
+gcloud secrets create kipris-access-key --replication-policy="automatic"
+gcloud secrets create ncbi-api-key --replication-policy="automatic"
+gcloud secrets create data-go-kr-key --replication-policy="automatic"
+gcloud secrets create law-oc --replication-policy="automatic"
+
 echo -n '<KIPRIS_KEY>'    | gcloud secrets versions add kipris-access-key --data-file=-
 echo -n '<NCBI_KEY>'      | gcloud secrets versions add ncbi-api-key --data-file=-
 echo -n '<DATA_GO_KR_KEY>'| gcloud secrets versions add data-go-kr-key --data-file=-
@@ -141,12 +139,18 @@ echo -n '<LAW_OC>'        | gcloud secrets versions add law-oc --data-file=-
 ```
 
 - 서비스는 `--no-allow-unauthenticated`(비공개)이며, Gemini Enterprise 의 Discovery Engine 서비스 에이전트에만 `roles/run.invoker` 를 부여합니다.
-- IIG 읽기 권한: BigQuery 방식이면 `mcp-reg` 서비스 계정에 해당 **데이터셋** `roles/bigquery.dataViewer`, 데이터 스토어 방식이면 `roles/discoveryengine.viewer`(`deploy.sh` 가 자동 부여). 데이터 스토어 방식 배포: `IIG_BACKEND=datastore IIG_DATASTORE_ID=<DS_ID> ./scripts/deploy.sh reg`
+- IIG 읽기 권한: 데이터 스토어 방식이면 `roles/discoveryengine.viewer`(`deploy.sh` 가 자동 부여). 데이터 스토어 방식 배포: `IIG_BACKEND=datastore IIG_DATASTORE_ID=<DS_ID> ./scripts/deploy.sh reg`
 - 배포 후 IAM 토큰으로 점검:
 
-  ```bash
-  python scripts/smoke_test.py --url https://<서비스URL>/mcp --token "$(gcloud auth print-identity-token)" --suite chem
+## 5. MCP 서버 확인 하기
+gcloud run services describe daewon-mcp-papers --region=asia-northeast3 --format="value(status.url)"
+gcloud run services describe daewon-mcp-chem --region=asia-northeast3 --format="value(status.url)"
+gcloud run services describe daewon-mcp-reg --region=asia-northeast3 --format="value(status.url)"
+
+source .venv/bin/activate
+python scripts/smoke_test.py --url https://<서비스URL>/mcp --token "$(gcloud auth print-identity-token)" --suite chem
   ```
+
 
 ## 6. Gemini Enterprise 설정 (4~5단계)
 

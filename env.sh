@@ -1,15 +1,18 @@
 
+export PYTHONPATH=.
+
 # ==============================================================================
 # 1. GCP 기본 설정 및 프로젝트 ID
 # ==============================================================================
 export PROJECT_ID="uk-adc-core-geminienterprise"
 export REGION="asia-northeast3"
+export BUCKET_NAME="uk-adc-core-geminienterprise-rdkit-storage"
 
 # ==============================================================================
 # 2. FDA IIG 조회용 Gemini Enterprise 데이터 스토어 설정
 # ==============================================================================
 export IIG_DS_PROJECT="uk-adc-core-geminienterprise"
-export IIG_DATASTORE_ID="<실제_생성한_IIG_데이터스토어_ID>"
+export IIG_DATASTORE_ID="daewon-research-ds_1794032917835"
 export IIG_DS_LOCATION="global"
 export IIG_FIELD_INGREDIENT="ingredient_name"
 export IIG_FIELD_ROUTE="route"
@@ -57,3 +60,11 @@ export BQ_MAX_BYTES_BILLED="322122547200"  # 300GB 한도 (바이트 단위)
 # ==============================================================================
 export PORT="8080"
 export LOG_LEVEL="INFO"
+
+# ==============================================================================
+# 7. Google patents Biqqury 실행을 위해 인증
+# ==============================================================================
+gcloud auth application-default login
+gcloud auth application-default set-quota-project "uk-adc-core-geminienterprise"
+gcloud auth application-default print-access-token
+export GOOGLE_APPLICATION_CREDENTIALS="/Users/jameskim/Downloads/TKCO/daewon-research-agent/credentials/gcp-sa-key.json"

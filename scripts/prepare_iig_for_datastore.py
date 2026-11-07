@@ -8,8 +8,8 @@
 사용 예
   python scripts/prepare_iig_for_datastore.py --csv data/iig.csv --data-date 2026-10 \
       --out-dir data/iig_out \
-      --gcs-uri gs://my-bucket/iig/iig_2026-10.jsonl \
-      --import-to projects/my-project/locations/global/collections/default_collection/dataStores/iig-ds
+      --gcs-uri gs://uk-adc-core-geminienterprise-rdkit-storage/iig_2026-10.jsonl \
+      --import-to projects/uk-adc-core-geminienterprise/locations/global/collections/default_collection/dataStores/daewon-research-ds_1794032917835
 
 --import-to 는 문서 가져오기 REST(documents:import)를 호출합니다(gcloud 인증 사용).
 처음에는 --gcs-uri 만 주고 콘솔(데이터 스토어 만들기 → Cloud Storage → 구조화 데이터)에서 가져오기를 해도 됩니다.
